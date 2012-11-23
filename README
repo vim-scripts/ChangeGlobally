@@ -1,0 +1,96 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=4321
+
+DESCRIPTION
+Changing existing text is one of the main editing tasks. In Vim, there are two
+approaches: Either use the c and s commands, then quit insert mode; maybe
+repeat this via . at another location. Or build a :substitute command for
+controlled replacement in the line, range, or buffer.
+This plugin implements a hybrid of these two contrasting approaches: It offers
+a gc command that works just like built-in c, and after leaving insert
+mode applies the local substitution to all other occurrences in the current
+line (in case of a small character change) or, when entire line(s) were
+changed, to the rest of the buffer.
+
+HOW IT WORKS
+The gc command hooks itself into the InsertLeave event, then applies
+something like :s/\=@"/\=@./g to the line or buffer.
+
+SEE ALSO
+- ReplaceWithRegister (vimscript #2703) simplifies another frequent editing
+  task: Replace the selection with the contents of register.
+- ChangeGloballySmartCase (vimscript #4322) is an add-on to this plugin that
+  implements a gC variant that uses a "smart case" substitution which covers
+  variations in upper-/lowercase ("maxSize" vs. "MaxSize") as well as
+  different coding styles like CamelCase and underscore_notation ("maxSize",
+  "MAX_SIZE").
+
+RELATED WORKS
+- multichange.vim (vimscript #4309) uses a command :[range]MultiChange to
+  modify the default c command to do an entire-word global substitution in the
+  entire range.
+
+USAGE
+[N]["x]gc{motion}       Delete {motion} text [into register x] and start
+                        inserting.
+{Visual}[N]["x]gc       Delete the highlighted text [into register x] and
+                        start inserting.
+                        After exiting insert mode, the substitution is
+                        applied:
+                        - For characterwise motions / selections: Globally to
+                          the changed line if possible, or globally in the
+                          entire buffer when no additional substitution can be
+                          made in the changed line or a very large [N] is
+                          given g:ChangeGlobally_GlobalCountThreshold.
+                        - For linewise motions / selections: Globally (for
+                          identical complete lines) in the entire buffer.
+                        - [N] times (including the just completed change, so
+                          only N > 1 really makes sense), starting from the
+                          position of the changed text.
+                          Note: A possible [count] inside {motion} is
+                          different from [N]; e.g., 2gc3w changes 3 words, and
+                          then applies this change 1 more time.
+
+                        The substitution is always done case-sensitive,
+                        regardless of the 'ignorecase' setting.
+                        When the changed text is surrounded by keyword
+                        boundaries (/\<text\>/), only keyword matches are
+                        replaced so spurious matches inside keywords (e.g.
+                        "IN" inside "rINg") are ignored. This does not apply
+                        to visual selections.
+
+["x]gcc                 Delete [count] lines [into register x] and start
+                        insert linewise. If 'autoindent' is on, preserve the
+                        indent of the first line. After exiting insert mode,
+                        the substitution is applied globally.
+
+                        When a command is repeated via ., the previous
+                        substitution (without entering a new insert mode) is
+                        re-applied to the visual selection, [count] next
+                        lines, or the range of the previous substitution.
+                        For a command that used a limit [N], the number of
+                        substitutions and the start column from where they
+                        were applied are kept.
+
+                        With the visualrepeat.vim plugin, commands can be
+                        repeated on a blockwise-visual selection. In that
+                        case:
+                        - A repeat of gcc matches not only complete lines
+                          (they probably aren't fully selected), just the text
+                          itself.
+                        - Start column and [N] limit restrictions are dropped;
+                          the change is applied anywhere inside the selected
+                          block.
+                        All these modifications are kept for subsequent
+                        repeats of the repeat, so the blockwise repeat can be
+                        cleverly employed to remove certain change
+                        restrictions for following repeats of different kinds.
+
+EXAMPLE
+Suppose you have a line like this, and you want to change "de" to "en":
+    A[lang=de]:after, SPAN[lang=de]:after { content: url("lang.de.gif"); }
+
+With the cursor on the start of any of the "de", type gce, enter the text
+"en", then press <Esc>. The line will turn into
+    A[lang=en]:after, SPAN[lang=en]:after { content: url("lang.en.gif"); }
+You can now re-apply this substitution to other lines or a visual selection
+via .

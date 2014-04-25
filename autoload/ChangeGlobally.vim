@@ -8,12 +8,26 @@
 "   - visualrepeat.vim (vimscript #3848) autoload script (optional)
 "   - visualrepeat/reapply.vim autoload script (optional)
 "
-" Copyright: (C) 2012-2013 Ingo Karkat
+" Copyright: (C) 2012-2014 Ingo Karkat
 "   The VIM LICENSE applies to this script; see ':help copyright'.
 "
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS
+"   1.21.018	23-Apr-2014	Add proper version guard for the \n with :s_c
+"				flag workaround after finding the precise
+"				offending patch and having a patch that fixes
+"				it.
+"   1.21.017	23-Apr-2014	Make g:ChangeGlobally_ConfirmCount have
+"				precedence over
+"				g:ChangeGlobally_GlobalCountThreshold; as the
+"				former may lie inside the latter.
+"   1.21.016	22-Apr-2014	FIX: Disable global substitution when
+"				g:ChangeGlobally_GlobalCountThreshold is 0, as
+"				is documented.
+"				ENH: Confirm each replacement via :s_c flag when
+"				a special g:ChangeGlobally_ConfirmCount is
+"				given.
 "   1.20.015	23-Jul-2013	Move ingointegration#GetText() into
 "				ingo-library.
 "   1.20.014	14-Jun-2013	Use ingo/msg.vim.
@@ -105,12 +119,14 @@ function! ChangeGlobally#SetParameters( count, isVisualMode, repeatMapping, visu
     let s:register = v:register
     let [s:isVisualMode, s:repeatMapping, s:visualrepeatMapping] = [a:isVisualMode, a:repeatMapping, a:visualrepeatMapping]
 
-    if a:count >= g:ChangeGlobally_GlobalCountThreshold
+    if g:ChangeGlobally_ConfirmCount > 0 && a:count == g:ChangeGlobally_ConfirmCount
+	let [s:count, s:isForceGlobal, s:isConfirm] = [0, 1, 1]
+    elseif g:ChangeGlobally_GlobalCountThreshold > 0 && a:count >= g:ChangeGlobally_GlobalCountThreshold
 	" When a very large [count] is given, turn a line-scoped substitution
 	" into a global, buffer-scoped one.
-	let [s:count, s:isForceGlobal] = [0, 1]
+	let [s:count, s:isForceGlobal, s:isConfirm] = [0, 1, 0]
     else
-	let [s:count, s:isForceGlobal] = [a:count, 0]
+	let [s:count, s:isForceGlobal, s:isConfirm] = [a:count, 0, 0]
     endif
 
     if a:0
@@ -271,7 +287,7 @@ function! s:Substitute( range, localRestriction, substitutionArguments )
     " a:substitutionArguments format:
     "   [patternPrefix, pattern, patternPostfix, separator, replacement, separator, flags]
     let l:substitutionCommand = a:range . 'substitute/' . a:localRestriction . join(a:substitutionArguments, '') . 'e'
-"****D echomsg '****' l:substitutionCommand
+"****D echomsg '****' l:substitutionCommand string(s:newText)
     call s:LastReplaceInit()
     if s:count
 	" It would be nice if we could abort the :substitution when the
@@ -299,6 +315,11 @@ function! ChangeGlobally#Substitute()
 "****D echomsg '****' string(s:insertStartPos) string(getpos("'[")) string(getpos("']")) string(@.) l:hasAbortedInsert l:isMultiChangeInsert
     let l:changedText = getreg(s:register)
     let s:newText = s:GetInsertion(s:range, l:isMultiChangeInsert)
+    if v:version == 703 && has('patch225') || v:version == 704 && ! has('patch261')
+	" XXX: Vim inserts \n == ^@ literally when the :s_c confirm flag is
+	" given. Convert to \r to work around this.
+	let s:newText = substitute(s:newText, '\n', '\r', 'g')
+    endif
 "****D echomsg '**** subst' string(l:changedText) string(@.) string(s:newText)
     " For :substitute, we need to convert newlines in both parts (differently).
     let l:search = '\V\C' . substitute(escape(l:changedText, '/\'), '\n', '\\n', 'g')
@@ -364,7 +385,7 @@ function! ChangeGlobally#Substitute()
 	    let l:beyondLineRange = '%'
 	endif
 
-	let s:substitution = ['', l:search, '', '/', l:replace, '/', 'g']
+	let s:substitution = ['', l:search, '', '/', l:replace, '/', 'g' . (s:isConfirm ? 'c' : '')]
 
 	" Note: The line may have been split into multiple lines by the editing;
 	" use '[, '] instead of the . range.
@@ -375,7 +396,7 @@ function! ChangeGlobally#Substitute()
 	" entire lines are substituted. Were we to alternatively append a \r to
 	" the replacement, the next line would be involved and the cursor
 	" misplaced.
-	let s:substitution = ['^', substitute(l:search, '\\n$', '', ''), '\$', '/', l:replace, '/', '']
+	let s:substitution = ['^', substitute(l:search, '\\n$', '', ''), '\$', '/', l:replace, '/', (s:isConfirm ? 'c' : '')]
 
 	let l:range = (s:count ? '.,$' : '%')
     else

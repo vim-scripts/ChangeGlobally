@@ -85,6 +85,13 @@ USAGE
                         cleverly employed to remove certain change
                         restrictions for following repeats of different kinds.
 
+[N]["x]gx{motion}       Delete {motion} text [into register x] and apply the
+                        deletion.
+{Visual}[N]["x]gx       Delete the highlighted text [into register x] and
+                        apply the deletion, like with gc.
+["x]gxx                 Delete [count] lines [into register x] and apply the
+                        deletion globally.
+
 EXAMPLE
 Suppose you have a line like this, and you want to change "de" to "en":
     A[lang=de]:after, SPAN[lang=de]:after { content: url("lang.de.gif"); }
